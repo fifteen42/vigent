@@ -1,0 +1,28 @@
+{
+  "name": "@vigent/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "vigent": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-agent-core": "*",
+    "@sinclair/typebox": "^0.34.0",
+    "@vigent/core": "workspace:*",
+    "@vigent/native-input": "workspace:*",
+    "@vigent/native-swift": "workspace:*",
+    "@vigent/recorder": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

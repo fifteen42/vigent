@@ -1,0 +1,13 @@
+{
+  "name": "@vigent/root",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vigent — macOS Computer Use Agent",
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:native-input": "pnpm --filter @vigent/native-input build",
+    "build:native-swift": "pnpm --filter @vigent/native-swift build",
+    "build:core": "pnpm --filter @vigent/core build",
+    "build:agent": "pnpm --filter @vigent/agent build"
+  }
+}
