@@ -12,6 +12,7 @@ import { createTtsTool } from './tts.js';
 import { createTranscribeTool } from './transcribe.js';
 import { createFileTools } from './files.js';
 import { createNotesTool } from './notes.js';
+import { createWebTools } from './web.js';
 
 export interface NativeModules {
   input: typeof import('@vigent/native-input');
@@ -25,6 +26,8 @@ export function createAllTools(native: NativeModules, config: VigentConfig): Age
     ...createSystemTools(native.bridge),
     ...createTimingTools(native.bridge),
     ...createFileTools(),
+    ...createNotesTool(),
+    ...createWebTools(),
   ];
 
   // Transcription requires Google API key
@@ -56,6 +59,7 @@ export function createComputerUseTools(native: NativeModules, config: VigentConf
     ...createTimingTools(native.bridge),
     ...createFileTools(),
     ...createNotesTool(),
+    ...createWebTools(),
   ];
 
   // Transcription if Google API key available

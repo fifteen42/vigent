@@ -278,6 +278,37 @@ function emitPanelFromResult(
       }
       break;
     }
+
+    case 'search_web': {
+      const details = result.details ?? {};
+      if (details.results && details.results.length > 0) {
+        emit({
+          type: 'panel',
+          panel: {
+            kind: 'web_search',
+            query: details.query ?? a?.query ?? '',
+            results: details.results,
+          },
+        });
+      }
+      break;
+    }
+
+    case 'fetch_url': {
+      const details = result.details ?? {};
+      const text = result.content?.find((c: any) => c.type === 'text')?.text ?? '';
+      if (!details.error && text) {
+        emit({
+          type: 'panel',
+          panel: {
+            kind: 'web_content',
+            url: details.url ?? a?.url ?? '',
+            content: text,
+          },
+        });
+      }
+      break;
+    }
   }
 }
 

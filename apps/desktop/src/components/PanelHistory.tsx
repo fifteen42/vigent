@@ -8,6 +8,8 @@ const PANEL_KIND_LABELS: Record<string, string> = {
   audio_player: '🔊 Audio',
   shell_output: '$ Shell',
   file_output: '📄 File',
+  web_search: '🔍 Search',
+  web_content: '🌐 Web',
 };
 
 interface PanelEntry {

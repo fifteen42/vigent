@@ -19,6 +19,8 @@ export type {
   AudioPlayerPanel,
   FileOutputPanel,
   ShellOutputPanel,
+  WebSearchPanel,
+  WebContentPanel,
   UIElementMark,
 
   // Agent event stream

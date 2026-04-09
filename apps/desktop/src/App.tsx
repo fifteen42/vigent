@@ -9,6 +9,8 @@ import { ShellOutput } from './components/panels/ShellOutput';
 import { Settings } from './components/Settings';
 import { PanelHistory } from './components/PanelHistory';
 import { RunningIndicator } from './components/RunningIndicator';
+import { WebSearch } from './components/panels/WebSearch';
+import { WebContent } from './components/panels/WebContent';
 
 export default function App() {
   const { messages, running, error, actionCount, activeTool, panelHistory, run, stop, clear } = useAgent();
@@ -204,6 +206,8 @@ function Panel({ panel }: { panel: AgentPanel }) {
     case 'transcript':       return <Transcript panel={panel} />;
     case 'image_gallery':    return <ImageGallery panel={panel} />;
     case 'shell_output':     return <ShellOutput panel={panel} />;
+    case 'web_search':       return <WebSearch panel={panel} />;
+    case 'web_content':      return <WebContent panel={panel} />;
     case 'audio_player': return (
       <div style={{ padding: 20 }}>
         <div style={styles.panelHeader}>

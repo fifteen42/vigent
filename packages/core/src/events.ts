@@ -20,7 +20,9 @@ export type AgentPanel =
   | ImageGalleryPanel
   | AudioPlayerPanel
   | FileOutputPanel
-  | ShellOutputPanel;
+  | ShellOutputPanel
+  | WebSearchPanel
+  | WebContentPanel;
 
 /** Live screen mirror — emitted when agent takes a screenshot */
 export interface ScreenMirrorPanel {
@@ -86,6 +88,21 @@ export interface FileOutputPanel {
   mimeType?: string;
   sizeBytes?: number;
   label?: string;
+}
+
+/** Web search results */
+export interface WebSearchPanel {
+  kind: 'web_search';
+  query: string;
+  results: Array<{ title: string; url: string; snippet: string }>;
+}
+
+/** Fetched web page content */
+export interface WebContentPanel {
+  kind: 'web_content';
+  url: string;
+  content: string;
+  title?: string;
 }
 
 /** Shell command output */

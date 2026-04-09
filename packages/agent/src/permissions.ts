@@ -45,6 +45,10 @@ const TOOL_RISK: Record<string, RiskLevel> = {
   save_note: 'safe',
   read_note: 'safe',
 
+  // Web tools — read-only network requests
+  fetch_url: 'safe',
+  search_web: 'safe',
+
   // Dangerous — can execute arbitrary code
   run_applescript: 'dangerous',
   run_shell: 'dangerous',
