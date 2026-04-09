@@ -1,3 +1,5 @@
+// Platform-agnostic types — usable by any Vigent-compatible agent or UI
+
 export type {
   ScreenshotResult,
   MousePosition,
@@ -6,3 +8,29 @@ export type {
   UIElement,
   ScreenInfo,
 } from './types.js';
+
+export type {
+  // Gen UI panels
+  AgentPanel,
+  ScreenMirrorPanel,
+  VideoProductionPanel,
+  TranscriptPanel,
+  ImageGalleryPanel,
+  AudioPlayerPanel,
+  FileOutputPanel,
+  ShellOutputPanel,
+  UIElementMark,
+
+  // Agent event stream
+  AgentEvent,
+  AgentTextEvent,
+  AgentToolStartEvent,
+  AgentToolEndEvent,
+  AgentPanelEvent,
+  AgentStepEvent,
+  AgentDoneEvent,
+  AgentErrorEvent,
+
+  // Utility
+  EventCallback,
+} from './events.js';

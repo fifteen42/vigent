@@ -7,14 +7,20 @@ import { createPermissionGuard } from '../permissions.js';
 import { pruneScreenshots } from '../context-manager.js';
 import { BudgetTracker } from '../budget-tracker.js';
 import type { VigentConfig } from '../config.js';
+import type { EventCallback } from '@vigent/core';
 
-// Track consecutive failures for a tool to implement retry logic
 interface FailureRecord {
   count: number;
   lastError: string;
 }
 
-export async function runComputerUse(task: string, native: NativeModules, config: VigentConfig) {
+export async function runComputerUse(
+  task: string,
+  native: NativeModules,
+  config: VigentConfig,
+  onEvent?: EventCallback,
+) {
+  const emit = onEvent ?? (() => {});
   const model = resolveModel(config.model, config.ollamaBaseUrl);
   const tools = createComputerUseTools(native, config);
   const permissionGuard = createPermissionGuard(config.permissionMode);
@@ -23,8 +29,12 @@ export async function runComputerUse(task: string, native: NativeModules, config
   let actionCount = 0;
   const failureTracker = new Map<string, FailureRecord>();
   const MAX_CONSECUTIVE_FAILURES = 3;
+  const actionTools = new Set([
+    'click', 'click_element', 'type_text', 'press_key', 'press_keys',
+    'scroll', 'drag', 'run_applescript', 'run_shell',
+  ]);
 
-  const actionTools = new Set(['click', 'click_element', 'type_text', 'press_key', 'press_keys', 'scroll', 'drag', 'run_applescript', 'run_shell']);
+  const toolStartTimes = new Map<string, number>();
 
   const agent = new Agent({
     initialState: {
@@ -43,38 +53,43 @@ export async function runComputerUse(task: string, native: NativeModules, config
       maxTokens: config.maxContextTokens,
     }),
     beforeToolCall: async (ctx) => {
-      // Budget check
       const status = budget.check(ctx.context.messages);
       if (status.isDiminishing) {
         return { block: true, reason: 'Context window nearly full. Wrapping up.' };
       }
 
-      // Action step limit
       if (actionTools.has(ctx.toolCall.name)) {
         actionCount++;
+        emit({ type: 'step', current: actionCount, max: config.maxSteps });
         if (actionCount > config.maxSteps) {
           return { block: true, reason: `Max action limit (${config.maxSteps}) reached.` };
         }
       }
 
-      // Check if this tool has failed too many times consecutively
       const record = failureTracker.get(ctx.toolCall.name);
       if (record && record.count >= MAX_CONSECUTIVE_FAILURES) {
-        failureTracker.delete(ctx.toolCall.name); // reset so model can try differently
+        failureTracker.delete(ctx.toolCall.name);
         return {
           block: true,
           reason: `Tool '${ctx.toolCall.name}' failed ${MAX_CONSECUTIVE_FAILURES} times in a row (last error: ${record.lastError}). Try a different approach.`,
         };
       }
 
-      // Permission check
       return permissionGuard(ctx);
     },
     afterToolCall: async ({ toolCall, result, isError }) => {
       const name = toolCall.name;
+      const durationMs = Date.now() - (toolStartTimes.get(name) ?? Date.now());
+      toolStartTimes.delete(name);
+
+      emit({ type: 'tool_end', name, durationMs, isError });
+
+      // Emit Gen UI panel events based on tool results
+      if (!isError) {
+        emitPanelFromResult(name, toolCall.arguments, result, emit);
+      }
 
       if (isError) {
-        // Update failure tracker
         const prev = failureTracker.get(name) ?? { count: 0, lastError: '' };
         const errorMsg = result.content
           .filter((c: any) => c.type === 'text')
@@ -97,10 +112,7 @@ export async function runComputerUse(task: string, native: NativeModules, config
         };
       }
 
-      // Success — reset failure counter for this tool
-      if (failureTracker.has(name)) {
-        failureTracker.delete(name);
-      }
+      if (failureTracker.has(name)) failureTracker.delete(name);
     },
   });
 
@@ -108,11 +120,20 @@ export async function runComputerUse(task: string, native: NativeModules, config
     switch (event.type) {
       case 'message_update':
         if (event.assistantMessageEvent?.type === 'text_delta') {
-          process.stdout.write(event.assistantMessageEvent.delta);
+          const delta: string = event.assistantMessageEvent.delta;
+          process.stdout.write(delta);
+          emit({ type: 'text', delta });
         }
         break;
       case 'tool_execution_start':
         process.stderr.write(`\n  [→] ${event.toolName}(${formatArgs(event.args)})\n`);
+        toolStartTimes.set(event.toolName, Date.now());
+        emit({
+          type: 'tool_start',
+          name: event.toolName,
+          label: event.toolName,
+          args: event.args ?? {},
+        });
         break;
       case 'tool_execution_end':
         process.stderr.write(`  [✓] done\n`);
@@ -125,9 +146,96 @@ export async function runComputerUse(task: string, native: NativeModules, config
 
   process.stderr.write(`\n[Model: ${model.name}] [Task: ${task}]\n\n`);
 
-  await agent.prompt(`Task: ${task}\n\nStart by calling screenshot_marked to observe the current screen state with interactive element markers.`);
+  await agent.prompt(
+    `Task: ${task}\n\nStart by calling screenshot_marked to observe the current screen state with interactive element markers.`
+  );
 
+  emit({ type: 'done', actionCount });
   process.stderr.write(`\nActions taken: ${actionCount}\n`);
+}
+
+// ── Panel emission from tool results ──────────────────────────────────────────
+
+function emitPanelFromResult(
+  toolName: string,
+  args: unknown,
+  result: any,
+  emit: EventCallback,
+) {
+  const a = args as any;
+
+  switch (toolName) {
+    case 'screenshot':
+    case 'screenshot_marked': {
+      const img = result.content?.find((c: any) => c.type === 'image');
+      const details = result.details ?? {};
+      if (img?.data) {
+        emit({
+          type: 'panel',
+          panel: {
+            kind: 'screen_mirror',
+            base64: img.data,
+            width: details.width ?? 0,
+            height: details.height ?? 0,
+            elements: details.elements ?? [],
+          },
+        });
+      }
+      break;
+    }
+
+    case 'generate_video': {
+      const text = result.content?.find((c: any) => c.type === 'text')?.text ?? '';
+      const url = text.match(/https?:\/\/\S+/)?.[0];
+      emit({
+        type: 'panel',
+        panel: {
+          kind: 'video_production',
+          prompt: a?.prompt ?? '',
+          status: url ? 'done' : 'generating',
+          url,
+        },
+      });
+      break;
+    }
+
+    case 'generate_image': {
+      const text = result.content?.find((c: any) => c.type === 'text')?.text ?? '';
+      const urls = [...text.matchAll(/https?:\/\/\S+/g)].map((m: any) => m[0]);
+      if (urls.length > 0) {
+        emit({
+          type: 'panel',
+          panel: { kind: 'image_gallery', prompt: a?.prompt ?? '', urls },
+        });
+      }
+      break;
+    }
+
+    case 'tts': {
+      const path = result.details?.outputPath ?? a?.outputPath ?? '';
+      if (path) {
+        emit({
+          type: 'panel',
+          panel: { kind: 'audio_player', localPath: path, text: a?.text },
+        });
+      }
+      break;
+    }
+
+    case 'run_shell': {
+      const details = result.details ?? {};
+      emit({
+        type: 'panel',
+        panel: {
+          kind: 'shell_output',
+          command: details.command ?? a?.command ?? '',
+          stdout: details.stdout ?? '',
+          stderr: details.stderr,
+        },
+      });
+      break;
+    }
+  }
 }
 
 function buildRecoveryAdvice(toolName: string, failCount: number): string {
@@ -147,7 +255,11 @@ function buildRecoveryAdvice(toolName: string, failCount: number): string {
     ],
     run_applescript: [
       'Check if the application supports AppleScript.',
-      'Try using direct UI interaction (click, type_text) instead.',
+      'Try using run_shell with a shell command instead.',
+    ],
+    run_shell: [
+      'Check the command syntax. Use get_clipboard or screenshot to inspect output.',
+      'Try breaking the command into smaller parts.',
     ],
   };
 
@@ -155,7 +267,6 @@ function buildRecoveryAdvice(toolName: string, failCount: number): string {
     'Take screenshot_marked to reassess the screen state.',
     'Try a different tool or approach.',
   ];
-
   return tips[(failCount - 1) % tips.length];
 }
 
