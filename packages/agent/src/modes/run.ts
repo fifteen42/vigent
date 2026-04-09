@@ -88,12 +88,23 @@ export async function runComputerUse(
 
       return permissionGuard(ctx);
     },
-    afterToolCall: async ({ toolCall, result, isError }) => {
+    afterToolCall: async ({ toolCall, result, isError, context }) => {
       const name = toolCall.name;
       const durationMs = Date.now() - (toolStartTimes.get(name) ?? Date.now());
       toolStartTimes.delete(name);
 
       emit({ type: 'tool_end', name, durationMs, isError });
+
+      // Emit budget after each tool call so UI can show context usage
+      if (context?.messages) {
+        const budgetStatus = budget.check(context.messages);
+        emit({
+          type: 'budget',
+          usedTokens: budgetStatus.usedTokens,
+          maxTokens: budgetStatus.maxTokens,
+          usedPercent: budgetStatus.usedPercent,
+        });
+      }
 
       // Emit Gen UI panel events based on tool results
       if (!isError) {

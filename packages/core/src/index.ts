@@ -32,6 +32,7 @@ export type {
   AgentStepEvent,
   AgentDoneEvent,
   AgentErrorEvent,
+  AgentBudgetEvent,
 
   // Utility
   EventCallback,

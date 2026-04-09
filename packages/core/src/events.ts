@@ -124,7 +124,8 @@ export type AgentEvent =
   | AgentPanelEvent
   | AgentStepEvent
   | AgentDoneEvent
-  | AgentErrorEvent;
+  | AgentErrorEvent
+  | AgentBudgetEvent;
 
 /** Streamed LLM text delta */
 export interface AgentTextEvent {
@@ -173,6 +174,14 @@ export interface AgentDoneEvent {
 export interface AgentErrorEvent {
   type: 'error';
   message: string;
+}
+
+/** Context window budget update */
+export interface AgentBudgetEvent {
+  type: 'budget';
+  usedTokens: number;
+  maxTokens: number;
+  usedPercent: number;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

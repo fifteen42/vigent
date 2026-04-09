@@ -28,6 +28,7 @@ export interface AgentState {
   actionCount: number;
   activeTool: ActiveTool | null;
   panelHistory: PanelEntry[];
+  contextUsedPercent: number;
 }
 
 export function useAgent() {
@@ -38,6 +39,7 @@ export function useAgent() {
     actionCount: 0,
     activeTool: null,
     panelHistory: [],
+    contextUsedPercent: 0,
   });
 
   const abortRef = useRef<AbortController | null>(null);
@@ -55,6 +57,7 @@ export function useAgent() {
       activeTool: null,
       actionCount: 0,
       panelHistory: [],
+      contextUsedPercent: 0,
       messages: [
         ...s.messages,
         { id: userMsgId, role: 'user', text: task },
@@ -159,6 +162,9 @@ export function useAgent() {
         case 'step':
           return { ...s, actionCount: event.current };
 
+        case 'budget':
+          return { ...s, contextUsedPercent: event.usedPercent };
+
         case 'done':
           return { ...s, actionCount: event.actionCount ?? s.actionCount, activeTool: null };
 
@@ -181,7 +187,7 @@ export function useAgent() {
   }, []);
 
   const clear = useCallback(() => {
-    setState({ messages: [], running: false, error: null, actionCount: 0, activeTool: null, panelHistory: [] });
+    setState({ messages: [], running: false, error: null, actionCount: 0, activeTool: null, panelHistory: [], contextUsedPercent: 0 });
   }, []);
 
   return { ...state, run, stop, clear };

@@ -13,7 +13,7 @@ import { WebSearch } from './components/panels/WebSearch';
 import { WebContent } from './components/panels/WebContent';
 
 export default function App() {
-  const { messages, running, error, actionCount, activeTool, panelHistory, run, stop, clear } = useAgent();
+  const { messages, running, error, actionCount, activeTool, panelHistory, contextUsedPercent, run, stop, clear } = useAgent();
   const [input, setInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [selectedPanelIndex, setSelectedPanelIndex] = useState<number>(-1);
@@ -133,6 +133,7 @@ export default function App() {
             toolName={activeTool?.name ?? null}
             toolLabel={TOOL_LABELS[activeTool?.name ?? ''] ?? activeTool?.label ?? null}
             actionCount={actionCount}
+            contextUsedPercent={contextUsedPercent}
           />
         )}
         <PanelHistory
