@@ -26,8 +26,7 @@ Usage:
   vigent generate image "prompt"       Generate images (MiniMax)
   vigent tts "text"                    Text-to-speech (MiniMax)
   vigent screenshot [output.jpg]       Take a screenshot
-  vigent workflow run <file.yaml>      Run a workflow definition
-  vigent serve [--port 3000]           Start HTTP server (POST /run)
+vigent serve [--port 3000]           Start HTTP server (POST /run)
   vigent info                          Show config and system info
 
 Environment variables:
@@ -191,34 +190,6 @@ async function main() {
         process.stdout.write(outputPath + '\n');
       } finally {
         native.bridge.stop();
-      }
-      break;
-    }
-
-    case 'workflow': {
-      const subCmd = args[1];
-      if (subCmd === 'run') {
-        const workflowFile = args[2];
-        if (!workflowFile) {
-          process.stderr.write('Usage: vigent workflow run <file.yaml>\n');
-          process.exit(1);
-        }
-        const { parseWorkflow, runWorkflow } = await import('@vigent/workflow');
-        const wf = parseWorkflow(path.resolve(workflowFile));
-        process.stderr.write(`[Workflow] Starting: ${wf.name}\n`);
-        const result = await runWorkflow(wf, {
-          env: {
-            ANTHROPIC_API_KEY: config.anthropicApiKey ?? '',
-            GOOGLE_API_KEY: config.googleApiKey ?? '',
-            MINIMAX_API_KEY: config.minimaxApiKey ?? '',
-            VIGENT_MODEL: config.model,
-          },
-        });
-        process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-        process.exit(result.status === 'failed' ? 1 : 0);
-      } else {
-        process.stderr.write('Usage: vigent workflow run <file.yaml>\n');
-        process.exit(1);
       }
       break;
     }
