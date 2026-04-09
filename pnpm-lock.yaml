@@ -28,9 +28,9 @@ importers:
       '@vigent/native-swift':
         specifier: workspace:*
         version: link:../native-swift
-      '@vigent/recorder':
+      '@vigent/video':
         specifier: workspace:*
-        version: link:../recorder
+        version: link:../video
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -58,14 +58,7 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/recorder:
-    dependencies:
-      '@vigent/core':
-        specifier: workspace:*
-        version: link:../core
-      '@vigent/native-swift':
-        specifier: workspace:*
-        version: link:../native-swift
+  packages/video:
     devDependencies:
       typescript:
         specifier: ^5.7.0

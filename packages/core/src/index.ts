@@ -1,8 +1,8 @@
 export type {
-  ActionEvent,
-  ActionLog,
   ScreenshotResult,
   MousePosition,
   MouseButton,
   AppInfo,
+  UIElement,
+  ScreenInfo,
 } from './types.js';

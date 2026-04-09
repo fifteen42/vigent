@@ -1,2 +1,6 @@
 packages:
-  - 'packages/*'
+  - 'packages/core'
+  - 'packages/agent'
+  - 'packages/video'
+  - 'packages/native-input'
+  - 'packages/native-swift'

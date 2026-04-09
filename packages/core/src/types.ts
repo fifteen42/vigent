@@ -1,23 +1,5 @@
-export interface ActionEvent {
-  timestamp: number;
-  type: 'click' | 'double_click' | 'right_click' | 'key' | 'scroll' | 'drag';
-  coordinates?: { x: number; y: number };
-  key?: string;
-  modifiers?: string[];
-  scrollDelta?: { dx: number; dy: number };
-  dragTo?: { x: number; y: number };
-  app: string;
-  windowTitle: string;
-  uiElement?: string;
-  screenshotPath: string;
-}
-
-export interface ActionLog {
-  id: string;
-  startTime: number;
-  endTime: number;
-  events: ActionEvent[];
-}
+// Vigent shared types
+// Recording/replay types removed — Vigent is now a native multimodal agent
 
 export interface ScreenshotResult {
   base64: string;
@@ -36,4 +18,20 @@ export type MouseButton = 'left' | 'right' | 'middle';
 export interface AppInfo {
   name: string;
   bundleId: string;
+}
+
+export interface UIElement {
+  role: string;
+  title?: string;
+  value?: string;
+  description?: string;
+}
+
+export interface ScreenInfo {
+  frontmostApp: AppInfo;
+  windowTitle: string;
+  screenWidth: number;
+  screenHeight: number;
+  mousePosition: MousePosition;
+  runningApps: AppInfo[];
 }
