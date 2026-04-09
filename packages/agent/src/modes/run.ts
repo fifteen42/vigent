@@ -24,7 +24,7 @@ export async function runComputerUse(task: string, native: NativeModules, config
   const failureTracker = new Map<string, FailureRecord>();
   const MAX_CONSECUTIVE_FAILURES = 3;
 
-  const actionTools = new Set(['click', 'click_element', 'type_text', 'press_key', 'press_keys', 'scroll', 'drag', 'run_applescript']);
+  const actionTools = new Set(['click', 'click_element', 'type_text', 'press_key', 'press_keys', 'scroll', 'drag', 'run_applescript', 'run_shell']);
 
   const agent = new Agent({
     initialState: {

@@ -28,8 +28,13 @@ const TOOL_RISK: Record<string, RiskLevel> = {
   generate_image: 'moderate',
   text_to_speech: 'moderate',
 
+  // Safe read-only additions
+  screenshot_marked: 'safe',
+  click_element: 'moderate',
+
   // Dangerous — can execute arbitrary code
   run_applescript: 'dangerous',
+  run_shell: 'dangerous',
 };
 
 export type PermissionMode = 'auto' | 'ask' | 'deny';

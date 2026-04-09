@@ -97,5 +97,38 @@ export function createSystemTools(bridge: VigentNativeBridge): AgentTool<any>[] 
     },
   };
 
-  return [openAppTool, focusAppTool, runApplescriptTool, getClipboardTool, setClipboardTool];
+  const runShellTool: AgentTool<any> = {
+    name: 'run_shell',
+    label: 'Run Shell Command',
+    description: [
+      'Run any shell command (bash/zsh). Use for file operations, ffmpeg, curl, python, etc.',
+      'stdout and stderr are both returned. Working directory is the user home directory.',
+      'Examples: "ffmpeg -i video.mp4 -i audio.mp3 out.mp4", "ls ~/Desktop", "curl -o file.mp4 <url>"',
+    ].join(' '),
+    parameters: Type.Object({
+      command: Type.String({ description: 'Shell command to run' }),
+      timeoutMs: Type.Optional(Type.Number({ description: 'Timeout in milliseconds (default: 30000)' })),
+    }),
+    execute: async (_id: string, params: any) => {
+      const timeout = params.timeoutMs ?? 30_000;
+      const { stdout, stderr } = await execAsync(params.command, {
+        timeout,
+        shell: '/bin/zsh',
+        cwd: process.env.HOME,
+        env: { ...process.env, TERM: 'dumb' },
+      }).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message ?? String(e) }));
+
+      const out = stdout.trim();
+      const err = stderr.trim();
+      const combined = [out, err].filter(Boolean).join('\n');
+      const preview = combined.slice(0, 3000) + (combined.length > 3000 ? '\n...(truncated)' : '');
+
+      return {
+        content: [{ type: 'text' as const, text: preview || '(no output)' }],
+        details: { command: params.command, stdout: out, stderr: err },
+      };
+    },
+  };
+
+  return [openAppTool, focusAppTool, runApplescriptTool, runShellTool, getClipboardTool, setClipboardTool];
 }
