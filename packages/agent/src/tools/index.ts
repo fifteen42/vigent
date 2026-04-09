@@ -9,6 +9,9 @@ import { createTimingTools } from './timing.js';
 import { createGenerateVideoTool } from './generate-video.js';
 import { createGenerateImageTool } from './generate-image.js';
 import { createTtsTool } from './tts.js';
+import { createTranscribeTool } from './transcribe.js';
+import { createFileTools } from './files.js';
+import { createNotesTool } from './notes.js';
 
 export interface NativeModules {
   input: typeof import('@vigent/native-input');
@@ -21,7 +24,12 @@ export function createAllTools(native: NativeModules, config: VigentConfig): Age
     ...createInputTools(native.input),
     ...createSystemTools(native.bridge),
     ...createTimingTools(native.bridge),
+    ...createFileTools(),
   ];
+
+  // Transcription requires Google API key
+  const transcribeTool = createTranscribeTool(config.googleApiKey);
+  if (transcribeTool) tools.push(transcribeTool);
 
   // Generation tools require MiniMax API key
   if (config.minimaxApiKey) {
@@ -39,14 +47,35 @@ export function createAllTools(native: NativeModules, config: VigentConfig): Age
   return tools;
 }
 
-// Computer Use only (no generation) — for run mode
+// Computer Use tools — includes file tools, transcription, and notes
 export function createComputerUseTools(native: NativeModules, config: VigentConfig): AgentTool[] {
-  return [
+  const tools: AgentTool[] = [
     ...createVisionTools(native.bridge, config),
     ...createInputTools(native.input),
     ...createSystemTools(native.bridge),
     ...createTimingTools(native.bridge),
+    ...createFileTools(),
+    ...createNotesTool(),
   ];
+
+  // Transcription if Google API key available
+  const transcribeTool = createTranscribeTool(config.googleApiKey);
+  if (transcribeTool) tools.push(transcribeTool);
+
+  // Generation tools if MiniMax key available
+  if (config.minimaxApiKey) {
+    const minimax = new MinimaxClient({
+      apiKey: config.minimaxApiKey,
+      baseUrl: config.minimaxBaseUrl,
+    });
+    tools.push(
+      createGenerateVideoTool(minimax),
+      createGenerateImageTool(minimax),
+      createTtsTool(minimax),
+    );
+  }
+
+  return tools;
 }
 
 export {
@@ -57,4 +86,6 @@ export {
   createGenerateVideoTool,
   createGenerateImageTool,
   createTtsTool,
+  createTranscribeTool,
+  createFileTools,
 };

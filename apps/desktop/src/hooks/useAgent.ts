@@ -10,11 +10,24 @@ export interface AgentMessage {
   panel?: AgentPanel;
 }
 
+export interface ActiveTool {
+  name: string;
+  label: string;
+  startedAt: number;
+}
+
+export interface PanelEntry {
+  panel: AgentPanel;
+  ts: number;
+}
+
 export interface AgentState {
   messages: AgentMessage[];
   running: boolean;
   error: string | null;
   actionCount: number;
+  activeTool: ActiveTool | null;
+  panelHistory: PanelEntry[];
 }
 
 export function useAgent() {
@@ -23,6 +36,8 @@ export function useAgent() {
     running: false,
     error: null,
     actionCount: 0,
+    activeTool: null,
+    panelHistory: [],
   });
 
   const abortRef = useRef<AbortController | null>(null);
@@ -37,6 +52,9 @@ export function useAgent() {
       ...s,
       running: true,
       error: null,
+      activeTool: null,
+      actionCount: 0,
+      panelHistory: [],
       messages: [
         ...s.messages,
         { id: userMsgId, role: 'user', text: task },
@@ -56,7 +74,15 @@ export function useAgent() {
       });
 
       if (!res.ok || !res.body) {
-        throw new Error(`Agent error: ${res.status}`);
+        // Try to parse error body
+        const errText = await res.text().catch(() => '');
+        let errMsg = `Agent error: ${res.status}`;
+        try {
+          const errJson = JSON.parse(errText);
+          if (errJson.error) errMsg = errJson.error;
+          if (errJson.hint) errMsg += `. ${errJson.hint}`;
+        } catch { /* ignore */ }
+        throw new Error(errMsg);
       }
 
       const reader = res.body.getReader();
@@ -83,9 +109,14 @@ export function useAgent() {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
-      setState(s => ({ ...s, error: String(err) }));
+      // Translate network errors to actionable messages
+      const raw = String(err);
+      const msg = raw.includes('Failed to fetch') || raw.includes('NetworkError')
+        ? 'Cannot connect to agent. Make sure vigent serve is running on port 3457.'
+        : raw;
+      setState(s => ({ ...s, error: msg }));
     } finally {
-      setState(s => ({ ...s, running: false }));
+      setState(s => ({ ...s, running: false, activeTool: null }));
       abortRef.current = null;
     }
   }, [state.running]);
@@ -107,16 +138,32 @@ export function useAgent() {
             messages: s.messages.map(m =>
               m.id === msgId ? { ...m, panel: event.panel } : m
             ),
+            // Append to panel history — deduplicate screen_mirror (keep only latest)
+            panelHistory: event.panel.kind === 'screen_mirror'
+              ? [
+                  ...s.panelHistory.filter(p => p.panel.kind !== 'screen_mirror'),
+                  { panel: event.panel, ts: Date.now() },
+                ]
+              : [...s.panelHistory, { panel: event.panel, ts: Date.now() }],
           };
+
+        case 'tool_start':
+          return {
+            ...s,
+            activeTool: { name: event.name, label: event.label ?? event.name, startedAt: Date.now() },
+          };
+
+        case 'tool_end':
+          return { ...s, activeTool: null };
 
         case 'step':
           return { ...s, actionCount: event.current };
 
         case 'done':
-          return { ...s, actionCount: event.actionCount ?? s.actionCount };
+          return { ...s, actionCount: event.actionCount ?? s.actionCount, activeTool: null };
 
         case 'error':
-          return { ...s, error: event.message };
+          return { ...s, error: event.message, activeTool: null };
 
         default:
           return s;
@@ -124,12 +171,17 @@ export function useAgent() {
     });
   }, []);
 
-  const stop = useCallback(() => {
+  const stop = useCallback(async () => {
+    // Signal the server to stop the task (graceful)
+    try {
+      await fetch(`${AGENT_URL}/stop`, { method: 'POST' });
+    } catch { /* server may not respond if crashed */ }
+    // Also abort the SSE connection
     abortRef.current?.abort();
   }, []);
 
   const clear = useCallback(() => {
-    setState({ messages: [], running: false, error: null, actionCount: 0 });
+    setState({ messages: [], running: false, error: null, actionCount: 0, activeTool: null, panelHistory: [] });
   }, []);
 
   return { ...state, run, stop, clear };

@@ -26,7 +26,8 @@ Usage:
   vigent generate image "prompt"       Generate images (MiniMax)
   vigent tts "text"                    Text-to-speech (MiniMax)
   vigent screenshot [output.jpg]       Take a screenshot
-vigent serve [--port 3000]           Start HTTP server (POST /run)
+  vigent serve [--port 3000]           Start HTTP server (POST /run, POST /stop)
+  vigent sessions                      List recent session logs
   vigent info                          Show config and system info
 
 Environment variables:
@@ -200,6 +201,31 @@ async function main() {
       const native = await initNative();
       startHttpServer(port, native, config);
       // Server runs until killed — don't call native.bridge.stop()
+      break;
+    }
+
+    case 'sessions': {
+      const sessionsDir = path.join(process.env.HOME ?? '/tmp', '.vigent', 'sessions');
+      try {
+        const files = await fs.readdir(sessionsDir);
+        const jsonlFiles = files.filter(f => f.endsWith('.jsonl')).sort().reverse().slice(0, 20);
+        if (jsonlFiles.length === 0) {
+          process.stdout.write('No sessions found. Run a task first.\n');
+        } else {
+          process.stdout.write(`Recent sessions (${sessionsDir}):\n`);
+          for (const f of jsonlFiles) {
+            const fullPath = path.join(sessionsDir, f);
+            const stat = await fs.stat(fullPath);
+            const first = (await fs.readFile(fullPath, 'utf8')).split('\n')[0];
+            const header = JSON.parse(first);
+            const task = header.event?.task ?? '(unknown)';
+            const date = new Date(header.ts).toLocaleString();
+            process.stdout.write(`  ${date}  "${task.slice(0, 60)}"\n    → ${fullPath}\n`);
+          }
+        }
+      } catch {
+        process.stdout.write(`No sessions directory found at ${sessionsDir}\n`);
+      }
       break;
     }
 

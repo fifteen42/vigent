@@ -83,7 +83,7 @@ export interface AudioPlayerPanel {
 export interface FileOutputPanel {
   kind: 'file_output';
   localPath: string;
-  mimeType: string;
+  mimeType?: string;
   sizeBytes?: number;
   label?: string;
 }

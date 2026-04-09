@@ -32,6 +32,19 @@ const TOOL_RISK: Record<string, RiskLevel> = {
   screenshot_marked: 'safe',
   click_element: 'moderate',
 
+  // File operations
+  read_file: 'safe',
+  list_files: 'safe',
+  write_file: 'moderate',
+  open_file: 'moderate',
+
+  // Transcription (uploads to Google, read-only on local FS)
+  transcribe_audio: 'moderate',
+
+  // In-session notes — safe, in-memory only
+  save_note: 'safe',
+  read_note: 'safe',
+
   // Dangerous — can execute arbitrary code
   run_applescript: 'dangerous',
   run_shell: 'dangerous',

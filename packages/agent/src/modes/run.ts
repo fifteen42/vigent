@@ -6,6 +6,7 @@ import { resolveModel } from '../models.js';
 import { createPermissionGuard } from '../permissions.js';
 import { pruneScreenshots } from '../context-manager.js';
 import { BudgetTracker } from '../budget-tracker.js';
+import { SessionLogger } from '../session-log.js';
 import type { VigentConfig } from '../config.js';
 import type { EventCallback } from '@vigent/core';
 
@@ -19,8 +20,13 @@ export async function runComputerUse(
   native: NativeModules,
   config: VigentConfig,
   onEvent?: EventCallback,
+  signal?: AbortSignal,
 ) {
-  const emit = onEvent ?? (() => {});
+  const sessionLog = new SessionLogger(task);
+  const emit: EventCallback = (event) => {
+    onEvent?.(event);
+    sessionLog.log(event);
+  };
   const model = resolveModel(config.model, config.ollamaBaseUrl);
   const tools = createComputerUseTools(native, config);
   const permissionGuard = createPermissionGuard(config.permissionMode);
@@ -53,6 +59,11 @@ export async function runComputerUse(
       maxTokens: config.maxContextTokens,
     }),
     beforeToolCall: async (ctx) => {
+      // Respect abort signal
+      if (signal?.aborted) {
+        return { block: true, reason: 'Task cancelled by user.' };
+      }
+
       const status = budget.check(ctx.context.messages);
       if (status.isDiminishing) {
         return { block: true, reason: 'Context window nearly full. Wrapping up.' };
@@ -152,6 +163,7 @@ export async function runComputerUse(
 
   emit({ type: 'done', actionCount });
   process.stderr.write(`\nActions taken: ${actionCount}\n`);
+  process.stderr.write(`Session log: ${sessionLog.path}\n`);
 }
 
 // ── Panel emission from tool results ──────────────────────────────────────────
@@ -233,6 +245,37 @@ function emitPanelFromResult(
           stderr: details.stderr,
         },
       });
+      break;
+    }
+
+    case 'transcribe_audio': {
+      const details = result.details ?? {};
+      if (details.transcript && !details.error) {
+        emit({
+          type: 'panel',
+          panel: {
+            kind: 'transcript',
+            text: details.transcript,
+            language: details.language !== 'auto' ? details.language : undefined,
+            sourceFile: details.sourceFile,
+          },
+        });
+      }
+      break;
+    }
+
+    case 'write_file': {
+      const details = result.details ?? {};
+      if (details.filePath && !details.error) {
+        emit({
+          type: 'panel',
+          panel: {
+            kind: 'file_output',
+            localPath: details.filePath,
+            sizeBytes: details.size,
+          },
+        });
+      }
       break;
     }
   }
