@@ -1,5 +1,6 @@
 import { Type } from '@sinclair/typebox';
 import type { AgentTool } from '@mariozechner/pi-agent-core';
+import { getLastElementMap } from './vision.js';
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -133,5 +134,54 @@ export function createInputTools(nativeInput: typeof import('@vigent/native-inpu
     },
   };
 
-  return [clickTool, typeTextTool, pressKeyTool, pressKeysTool, scrollTool, dragTool];
+  // ── click_element (SoM) ───────────────────────────────────────────────────
+  const clickElementTool: AgentTool<any> = {
+    name: 'click_element',
+    label: 'Click Element by ID',
+    description: [
+      'Click a UI element by its marker ID from the last screenshot_marked call.',
+      'This is the preferred way to click — more reliable than pixel coordinates.',
+      'Always call screenshot_marked first to get element IDs.',
+    ].join(' '),
+    parameters: Type.Object({
+      elementId: Type.Number({ description: 'The element number shown in the screenshot markers (e.g. 7)' }),
+      button: Type.Optional(Type.Union([
+        Type.Literal('left'), Type.Literal('right'), Type.Literal('middle'),
+      ], { description: 'Mouse button (default: left)' })),
+      count: Type.Optional(Type.Number({ description: 'Click count: 1=single, 2=double (default: 1)' })),
+    }),
+    execute: async (_id: string, params: any) => {
+      const elementMap = getLastElementMap();
+      const element = elementMap.get(params.elementId);
+
+      if (!element) {
+        const available = Array.from(elementMap.keys()).join(', ');
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Element #${params.elementId} not found. Available IDs: ${available || 'none — call screenshot_marked first'}`,
+          }],
+          details: { error: 'element_not_found', elementId: params.elementId },
+        };
+      }
+
+      const x = Math.round(element.centerX);
+      const y = Math.round(element.centerY);
+      nativeInput.moveMouse(x, y);
+      await sleep(50);
+      nativeInput.mouseClick(params.button ?? 'left', params.count ?? 1);
+      await sleep(50);
+
+      const label = element.title ?? element.value ?? element.role;
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Clicked #${params.elementId} "${label}" at (${x},${y})${params.count === 2 ? ' (double)' : ''}`,
+        }],
+        details: { elementId: params.elementId, x, y, element },
+      };
+    },
+  };
+
+  return [clickTool, clickElementTool, typeTextTool, pressKeyTool, pressKeysTool, scrollTool, dragTool];
 }

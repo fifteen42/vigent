@@ -168,6 +168,38 @@ func handleCommand(_ command: Command) -> Response {
         let ok = Accessibility.setValueAtPoint(x: x, y: y, text: text)
         return Response(success: ok, data: nil, error: ok ? nil : "Failed to set value")
 
+    case "list_elements":
+        let elements = Accessibility.listInteractiveElements()
+        let encoder2 = JSONEncoder()
+        if let jsonData = try? encoder2.encode(elements),
+           let arr = try? JSONSerialization.jsonObject(with: jsonData) {
+            return Response(success: true, data: AnyCodable(arr), error: nil)
+        }
+        return Response(success: true, data: AnyCodable([Any]()), error: nil)
+
+    case "screenshot_marked":
+        let quality = (command.params?["quality"]?.value as? Double) ?? 0.75
+        let maxWidth = (command.params?["maxWidth"]?.value as? Int) ?? 1280
+        let maxHeight = (command.params?["maxHeight"]?.value as? Int) ?? 800
+        if let result = Screenshot.captureWithMarks(quality: quality, maxWidth: maxWidth, maxHeight: maxHeight) {
+            let ss = result.screenshot
+            let encoder3 = JSONEncoder()
+            var elemsArr: Any = [Any]()
+            if let jsonData = try? encoder3.encode(result.elements),
+               let arr = try? JSONSerialization.jsonObject(with: jsonData) {
+                elemsArr = arr
+            }
+            let dict: [String: Any] = [
+                "base64": ss.base64,
+                "width": ss.width,
+                "height": ss.height,
+                "displayId": ss.displayId,
+                "elements": elemsArr,
+            ]
+            return Response(success: true, data: AnyCodable(dict), error: nil)
+        }
+        return Response(success: false, data: nil, error: "Screenshot with marks failed")
+
     case "start_recording":
         eventMonitor.start()
         return Response(success: true, data: nil, error: nil)

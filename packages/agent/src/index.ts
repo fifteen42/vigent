@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { MinimaxClient } from './client/minimax.js';
 import { runComputerUse } from './modes/run.js';
 import { runVideoAnalysis } from './modes/video.js';
+import { runTranscribe } from './modes/transcribe.js';
 import { startHttpServer } from './modes/serve.js';
 import type { NativeModules } from './tools/index.js';
 import * as path from 'node:path';
@@ -20,10 +21,12 @@ Vigent — Native Multimodal Agent
 Usage:
   vigent run "task"                    Run a computer use task
   vigent video <path> "question"       Analyze a video file
+  vigent transcribe <path>             Transcribe audio/video to text (Gemini)
   vigent generate video "prompt"       Generate a video (MiniMax)
   vigent generate image "prompt"       Generate images (MiniMax)
   vigent tts "text"                    Text-to-speech (MiniMax)
   vigent screenshot [output.jpg]       Take a screenshot
+  vigent workflow run <file.yaml>      Run a workflow definition
   vigent serve [--port 3000]           Start HTTP server (POST /run)
   vigent info                          Show config and system info
 
@@ -162,6 +165,21 @@ async function main() {
       break;
     }
 
+    case 'transcribe': {
+      const mediaPath = args[1];
+      if (!mediaPath) {
+        process.stderr.write('Usage: vigent transcribe <audio-or-video-file> [--language en] [--prompt "hint"]\n');
+        process.exit(1);
+      }
+      const langFlag = args.indexOf('--language');
+      const promptFlag = args.indexOf('--prompt');
+      await runTranscribe(mediaPath, config, {
+        language: langFlag >= 0 ? args[langFlag + 1] : undefined,
+        prompt: promptFlag >= 0 ? args[promptFlag + 1] : undefined,
+      });
+      break;
+    }
+
     case 'screenshot': {
       const outputPath = args[1] ?? `screenshot_${Date.now()}.jpg`;
       const native = await initNative();
@@ -173,6 +191,34 @@ async function main() {
         process.stdout.write(outputPath + '\n');
       } finally {
         native.bridge.stop();
+      }
+      break;
+    }
+
+    case 'workflow': {
+      const subCmd = args[1];
+      if (subCmd === 'run') {
+        const workflowFile = args[2];
+        if (!workflowFile) {
+          process.stderr.write('Usage: vigent workflow run <file.yaml>\n');
+          process.exit(1);
+        }
+        const { parseWorkflow, runWorkflow } = await import('@vigent/workflow');
+        const wf = parseWorkflow(path.resolve(workflowFile));
+        process.stderr.write(`[Workflow] Starting: ${wf.name}\n`);
+        const result = await runWorkflow(wf, {
+          env: {
+            ANTHROPIC_API_KEY: config.anthropicApiKey ?? '',
+            GOOGLE_API_KEY: config.googleApiKey ?? '',
+            MINIMAX_API_KEY: config.minimaxApiKey ?? '',
+            VIGENT_MODEL: config.model,
+          },
+        });
+        process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+        process.exit(result.status === 'failed' ? 1 : 0);
+      } else {
+        process.stderr.write('Usage: vigent workflow run <file.yaml>\n');
+        process.exit(1);
       }
       break;
     }

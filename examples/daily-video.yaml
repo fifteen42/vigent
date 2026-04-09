@@ -1,0 +1,49 @@
+# 示例工作流：每日短视频生成管线
+# 用法: vigent workflow run examples/daily-video.yaml
+name: 每日科技资讯短视频
+description: 自动抓取资讯 → 生成脚本 → TTS 旁白 → 生成视频
+
+steps:
+  - id: fetch_news
+    name: 抓取今日科技资讯
+    action:
+      type: run
+      task: "打开 Safari，访问 sspai.com，复制首页前5条文章标题和摘要"
+    outputVar: NEWS_CONTENT
+    retry:
+      maxAttempts: 2
+      delayMs: 3000
+
+  - id: write_script
+    name: 生成视频旁白脚本
+    dependsOn: [fetch_news]
+    action:
+      type: run
+      task: "根据以下资讯内容，写一段60秒视频旁白脚本，要求简洁生动，适合 TTS 朗读。资讯内容：{{NEWS_CONTENT}}"
+    outputVar: SCRIPT
+
+  - id: tts_narration
+    name: 生成旁白音频
+    dependsOn: [write_script]
+    action:
+      type: tts
+      text: "{{SCRIPT}}"
+      outputPath: "output/narration.mp3"
+      voiceId: "Bowen-ZH"
+    outputVar: AUDIO_PATH
+
+  - id: generate_video
+    name: 生成背景视频
+    action:
+      type: generate_video
+      prompt: "科技感未来城市，霓虹灯，快速剪辑风格，无人，4K 质感"
+      outputPath: "output/background.mp4"
+    outputVar: VIDEO_URL
+
+  - id: notify_done
+    name: 通知完成
+    dependsOn: [tts_narration, generate_video]
+    continueOnError: true
+    action:
+      type: shell
+      command: "echo '✓ 视频素材生成完成！音频: {{AUDIO_PATH}} | 视频URL: {{VIDEO_URL}}'"

@@ -31,6 +31,23 @@ interface UIElementData {
   description?: string;
 }
 
+interface UIElementWithBounds {
+  id: number;
+  role: string;
+  title?: string;
+  value?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  centerX: number;
+  centerY: number;
+}
+
+interface MarkedScreenshotData extends ScreenshotData {
+  elements: UIElementWithBounds[];
+}
+
 class VigentNativeBridge {
   private process: ChildProcess | null = null;
   private readline: Interface | null = null;
@@ -136,6 +153,33 @@ class VigentNativeBridge {
     return res.data as boolean;
   }
 
+  async listInteractiveElements(): Promise<UIElementWithBounds[]> {
+    const res = await this.send('list_elements');
+    if (!res.success) throw new Error(res.error ?? 'Failed to list elements');
+    return (res.data as UIElementWithBounds[]) ?? [];
+  }
+
+  async screenshotWithMarks(
+    quality = 0.75,
+    maxWidth = 1280,
+    maxHeight = 800
+  ): Promise<MarkedScreenshotData> {
+    const res = await this.send('screenshot_marked', { quality, maxWidth, maxHeight });
+    if (!res.success) throw new Error(res.error ?? 'Screenshot with marks failed');
+    const data = res.data as any;
+    return {
+      base64: data.base64,
+      width: data.width,
+      height: data.height,
+      displayId: data.displayId,
+      elements: (data.elements ?? []).map((el: any) => ({
+        ...el,
+        centerX: el.x + el.width / 2,
+        centerY: el.y + el.height / 2,
+      })),
+    };
+  }
+
   async startRecording(): Promise<void> {
     const res = await this.send('start_recording');
     if (!res.success) throw new Error(res.error ?? 'Failed to start recording');
@@ -169,4 +213,4 @@ interface RecordedEventData {
 }
 
 export { VigentNativeBridge };
-export type { ScreenshotData, AppInfoData, UIElementData, RecordedEventData };
+export type { ScreenshotData, AppInfoData, UIElementData, UIElementWithBounds, MarkedScreenshotData, RecordedEventData };

@@ -20,7 +20,8 @@
     "@vigent/core": "workspace:*",
     "@vigent/native-input": "workspace:*",
     "@vigent/native-swift": "workspace:*",
-    "@vigent/video": "workspace:*"
+    "@vigent/video": "workspace:*",
+    "@vigent/workflow": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

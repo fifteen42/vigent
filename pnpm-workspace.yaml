@@ -4,3 +4,4 @@ packages:
   - 'packages/video'
   - 'packages/native-input'
   - 'packages/native-swift'
+  - 'packages/workflow'

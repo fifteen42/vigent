@@ -8,6 +8,12 @@ import { pruneScreenshots } from '../context-manager.js';
 import { BudgetTracker } from '../budget-tracker.js';
 import type { VigentConfig } from '../config.js';
 
+// Track consecutive failures for a tool to implement retry logic
+interface FailureRecord {
+  count: number;
+  lastError: string;
+}
+
 export async function runComputerUse(task: string, native: NativeModules, config: VigentConfig) {
   const model = resolveModel(config.model, config.ollamaBaseUrl);
   const tools = createComputerUseTools(native, config);
@@ -15,6 +21,10 @@ export async function runComputerUse(task: string, native: NativeModules, config
   const budget = new BudgetTracker(model.contextWindow ?? 200_000);
 
   let actionCount = 0;
+  const failureTracker = new Map<string, FailureRecord>();
+  const MAX_CONSECUTIVE_FAILURES = 3;
+
+  const actionTools = new Set(['click', 'click_element', 'type_text', 'press_key', 'press_keys', 'scroll', 'drag', 'run_applescript']);
 
   const agent = new Agent({
     initialState: {
@@ -40,7 +50,6 @@ export async function runComputerUse(task: string, native: NativeModules, config
       }
 
       // Action step limit
-      const actionTools = new Set(['click', 'type_text', 'press_key', 'press_keys', 'scroll', 'drag', 'run_applescript']);
       if (actionTools.has(ctx.toolCall.name)) {
         actionCount++;
         if (actionCount > config.maxSteps) {
@@ -48,17 +57,49 @@ export async function runComputerUse(task: string, native: NativeModules, config
         }
       }
 
+      // Check if this tool has failed too many times consecutively
+      const record = failureTracker.get(ctx.toolCall.name);
+      if (record && record.count >= MAX_CONSECUTIVE_FAILURES) {
+        failureTracker.delete(ctx.toolCall.name); // reset so model can try differently
+        return {
+          block: true,
+          reason: `Tool '${ctx.toolCall.name}' failed ${MAX_CONSECUTIVE_FAILURES} times in a row (last error: ${record.lastError}). Try a different approach.`,
+        };
+      }
+
       // Permission check
       return permissionGuard(ctx);
     },
     afterToolCall: async ({ toolCall, result, isError }) => {
+      const name = toolCall.name;
+
       if (isError) {
+        // Update failure tracker
+        const prev = failureTracker.get(name) ?? { count: 0, lastError: '' };
+        const errorMsg = result.content
+          .filter((c: any) => c.type === 'text')
+          .map((c: any) => c.text)
+          .join(' ')
+          .slice(0, 200);
+        failureTracker.set(name, { count: prev.count + 1, lastError: errorMsg });
+
+        const consecutiveFails = prev.count + 1;
+        const advice = buildRecoveryAdvice(name, consecutiveFails);
+
         return {
           content: [
             ...result.content,
-            { type: 'text' as const, text: `⚠️ Tool '${toolCall.name}' failed. Try: 1) Verify coordinates via screenshot 2) Check app is focused 3) Alternative approach` },
+            {
+              type: 'text' as const,
+              text: `⚠️ '${name}' failed (attempt ${consecutiveFails}/${MAX_CONSECUTIVE_FAILURES}). ${advice}`,
+            },
           ],
         };
+      }
+
+      // Success — reset failure counter for this tool
+      if (failureTracker.has(name)) {
+        failureTracker.delete(name);
       }
     },
   });
@@ -84,9 +125,38 @@ export async function runComputerUse(task: string, native: NativeModules, config
 
   process.stderr.write(`\n[Model: ${model.name}] [Task: ${task}]\n\n`);
 
-  await agent.prompt(`Task: ${task}\n\nStart by taking a screenshot to observe the current screen state.`);
+  await agent.prompt(`Task: ${task}\n\nStart by calling screenshot_marked to observe the current screen state with interactive element markers.`);
 
   process.stderr.write(`\nActions taken: ${actionCount}\n`);
+}
+
+function buildRecoveryAdvice(toolName: string, failCount: number): string {
+  const suggestions: Record<string, string[]> = {
+    click: [
+      'Verify the coordinates using screenshot_marked.',
+      'Try using click_element with an element ID instead.',
+      'Check if the target app is focused using get_screen_info.',
+    ],
+    click_element: [
+      'Call screenshot_marked again to refresh element IDs — the UI may have changed.',
+      'Fall back to click with coordinates if the element is visible but not in the list.',
+    ],
+    type_text: [
+      'Click the input field first to focus it, then try typing.',
+      'Try using press_key or keyboard shortcuts instead.',
+    ],
+    run_applescript: [
+      'Check if the application supports AppleScript.',
+      'Try using direct UI interaction (click, type_text) instead.',
+    ],
+  };
+
+  const tips = suggestions[toolName] ?? [
+    'Take screenshot_marked to reassess the screen state.',
+    'Try a different tool or approach.',
+  ];
+
+  return tips[(failCount - 1) % tips.length];
 }
 
 function formatArgs(args: unknown): string {
