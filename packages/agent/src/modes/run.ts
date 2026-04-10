@@ -42,13 +42,18 @@ export async function runComputerUse(
 
   const toolStartTimes = new Map<string, number>();
 
+  // Gemini 2.5 Pro requires thinking mode to be enabled
+  const needsThinking = model.id === 'gemini-2.5-pro' || /thinking/i.test(model.name);
+
   const agent = new Agent({
     initialState: {
       systemPrompt: COMPUTER_USE_SYSTEM_PROMPT,
       model,
       tools,
       messages: [],
+      thinkingLevel: needsThinking ? 'low' : 'off',
     },
+    thinkingBudgets: needsThinking ? { minimal: 512, low: 1024, medium: 4096, high: 16384 } : undefined,
     getApiKey: async (provider: string) => {
       if (provider === 'anthropic') return config.anthropicApiKey;
       if (provider === 'google') return config.googleApiKey;
@@ -139,6 +144,10 @@ export async function runComputerUse(
   });
 
   agent.subscribe((event: any) => {
+    // DEBUG: log all event types
+    if (process.env.VIGENT_DEBUG) {
+      process.stderr.write(`[debug:event] ${event.type}\n`);
+    }
     switch (event.type) {
       case 'message_update':
         if (event.assistantMessageEvent?.type === 'text_delta') {
@@ -160,6 +169,18 @@ export async function runComputerUse(
       case 'tool_execution_end':
         process.stderr.write(`  [✓] done\n`);
         break;
+      case 'message_end':
+        // Surface stopReason / errorMessage from the assistant message
+        if (event.message?.role === 'assistant') {
+          const stopReason = event.message.stopReason;
+          const errorMsg = event.message.errorMessage;
+          if (stopReason === 'error' || stopReason === 'aborted') {
+            const text = `LLM error (${stopReason}): ${errorMsg ?? 'no details'}`;
+            process.stderr.write(`\n❌ ${text}\n`);
+            emit({ type: 'error', message: text });
+          }
+        }
+        break;
       case 'agent_end':
         process.stderr.write('\n');
         break;
@@ -168,9 +189,23 @@ export async function runComputerUse(
 
   process.stderr.write(`\n[Model: ${model.name}] [Task: ${task}]\n\n`);
 
-  await agent.prompt(
-    `Task: ${task}\n\nStart by calling screenshot_marked to observe the current screen state with interactive element markers.`
-  );
+  try {
+    await agent.prompt(
+      `Task: ${task}\n\nStart by calling screenshot_marked to observe the current screen state with interactive element markers.`
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+    process.stderr.write(`\n❌ agent.prompt threw: ${msg}\n`);
+    emit({ type: 'error', message: msg.split('\n')[0] });
+  }
+
+  // Check if the last message has an error state
+  const lastMsg = agent.state.messages[agent.state.messages.length - 1];
+  if (lastMsg?.role === 'assistant' && (lastMsg as any).stopReason === 'error') {
+    const errText = (lastMsg as any).errorMessage ?? 'unknown LLM error';
+    process.stderr.write(`\n❌ Last message error: ${errText}\n`);
+    emit({ type: 'error', message: errText });
+  }
 
   emit({ type: 'done', actionCount });
   process.stderr.write(`\nActions taken: ${actionCount}\n`);
